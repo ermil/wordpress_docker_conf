@@ -1,0 +1,72 @@
+#+TITLE:   Wordpress Docker configuration
+
+* Configuration du docker
+Wordpress est un logiciel libre qui permet de réaliser des sites web. Afin d'assurer son fonctionnement, une base de données est nécessaire. Ce répertoire contient donc ces deux services. 
+** Configuration de l'environnement
+Voir [[https://hub.docker.com/_/wordpress]] et [[https://hub.docker.com/_/mysql]] pour plus de détails sur comment utiliser ces images. 
+
+Le fichier ~.env~ défini à la fois les valeurs des variables d'environnement nécessaires pour les images, et les variables d'environnement pour configurer traefik en définissant le nom de domaine correspondant. Ce fichier est lu par docker-compose pour faire son initialisation.
+** Configuration de wordpress
+Pour réaliser l'installation de wordpress, il suffit de créer un répertoire wp_data et de changer le propriétaire pour l'utilisateur et le groupe auquel appartient l'utilisateur web, soit www-data. Cet utilisateur doit exister sur l'hôte(sinon je pense que le numéro d'utilisateur correspondant est 33). On peut utiliser la commande:
+#+begin_src 
+mkdir wp_data
+chown -R www-data:www-data wp_data
+#+end_src
+La configuration se fait après avoir lancé les deux dockers. Il faut aller accéder au site via un navigateur et commencer à faire son site web. (Peut-être qu'il faut accéder à la page $DOMAINE/wp-admin ou wp-login pour que l'installateur se lance...). Il est possible qu'il faille attendre quelques instants avant que traefik génère les certificats avec let's encrypt.
+** Configuration de mysql
+Pour l'installation de la base de données, il faut créer le répertoire pour celle-ci.
+#+begin_src 
+mkdir -p database/data
+#+end_src
+* Usages et fonctionnement
+** Volumes
+Il est nécessaire de soit monter un répertoire ou de créer un volume où les données sont stockées dans les deux conteneurs afin d'assurer leur pérénité même si on arrête ou supprime le conteneur. Autrement les données seraient effacées à chaque fois, il faudrait donc recommencer le site web... Lorsque les données sont présentes dans le répertoire dès le début, alors, elles sont réutilisées directement.
+** Backup de la base de données
+Pour faire une sauvegarde de la base de données, il faut exécuter un dump dans le docker et l'envoyer vers un fichier. Cette commande est incluse dans le makefile et peut être réalisée via ~make backup~. Ou de manière équivalente:
+#+begin_src 
+docker exec <id> /bin/bash -c '/usr/bin/mysqldump -u root -p"${MYSQL_ROOT_PASSWORD}" ${MYSQL_DATABASE}"' > <nom_du_fichier>
+#+end_src
+Cette commande utilise les variables d'environnement qui sont présentes dans le conteneur, donc pas besoin de les rentrer manuellement.
+** makefile
+Un fichier makefile permet de réaliser les différentes commandes de bases rapidement. Le but est surtout dans le cas d'un makefile à un niveau de hiérarchie plus haut que ce projet qui peut exécuter une commande donnée dans chacun des sous-répertoires. Cela permet donc que chaque makefile corresponde aux spécificités du conteneur. 
+
+Dans ce makefile, il y a la variable ~c~ pour cible qui permet de choisir d'appliquer la commande uniquement à un service. Cela peut être affecté dans la ligne de commande avec
+#+begin_src 
+make <action> c=<service_name>
+#+end_src
+** Scalling
+J'ai jamais essayé... mais ça serait probablement la façon de générer une deuxième instance d'un service.
+#+begin_src 
+docker-compose up -d --scale <service_name>=<number>
+#+end_src
+** networks
+Le réseau ~back-end~ est créé par docker-compose. Celui-ci crée un réseau dont le nom final correspond à <nom_repertoire>-back-end. Cela permet donc d'assurer que si plusieurs sites web sont créés avec ce même projet, cette connexion reste isolée des autres réseaux.
+** Traefik
+La configuration de traefik est définie dans les sections labels des deux services. Il y a seulement le service wordpress qui est ouvert à traefik, et il est disponible sur le réseau traefik_network.
+#+begin_src yaml
+- "traefik.enable=true"
+- "traefik.docker.network=traefik_network"
+#+end_src
+On définit aussi deux points d'entrées, soit sur HTTP et HTTPS, sur lesquels le site pourra recevoir des requêtes. Puisque l'un de ces points d'entrée requiert un certificat et pas l'autre, il faut deux /routers/ différents depuis la version 2 de traefik.
+#+begin_src yaml
+- "traefik.http.routers.wp_${DOMAINE_NAME}.entrypoints=http"
+- "traefik.http.routers.wp_${DOMAINE_NAME}_https.entrypoints=https"
+#+end_src
+Pour le site wordpress, les requêtes lui sont acheminées si l'adresse correspond soit au domaine, soit à sousdomaine.domaine. 
+#+begin_src yaml
+- "traefik.http.routers.wp_${DOMAINE_NAME}.rule=Host(`$SOUSDOMAINE_WORDPRESS.$DOMAINE`,`$DOMAINE`)"
+- "traefik.http.routers.wp_${DOMAINE_NAME}_https.rule=Host(`$SOUSDOMAINE_WORDPRESS.$DOMAINE`,`$DOMAINE`)"
+#+end_src
+Il y a une redirection obligatoire du router HTTP vers HTTPS.
+#+begin_src yaml
+- "traefik.http.middlewares.wp_${DOMAINE_NAME}_redirect.redirectScheme.scheme=https"
+- "traefik.http.routers.wp_${DOMAINE_NAME}.middlewares=wp_${DOMAINE_NAME}_redirect"
+#+end_src
+Et pour le point d'entrée HTTPS, c'est let's encrypt qui va générer le certificat avec le webresolver déclaré dans la configuration statique.
+ #+begin_src yaml
+- "traefik.http.routers.wp_${DOMAINE_NAME}_https.tls=true"
+- "traefik.http.routers.wp_${DOMAINE_NAME}_https.tls.certresolver=webresolver"
+ #+end_src 
+
+
+
