@@ -1,7 +1,7 @@
 IMAGES := mysql wordpress
 BACKUP_DIR := $(shell dirname $(realpath $(lastword $(MAKEFILE_LIST))))/../backup
 # get the current directory name (without path)
-PROJECT_NAME := $(shell basename ${PWD})
+PROJECT_NAME := $(lastword  $(subst /, , $(shell dirname $(realpath $(lastword $(MAKEFILE_LIST))))))
 # PROJECT_NAME := $(shell echo $${PWD\#\#*/})
 
 
@@ -33,7 +33,7 @@ down:
 	@docker-compose -f $(DOCKER_COMPOSE_FILE) down
 
 backup:
-	tar -cJpvf $(BACKUP_DIR)/$(PROJECT_NAME)_$(TIMESTAMP)_wp_data.tar.xz -C $(CURDIR) wp_data docker-compose makefile .env
+	tar -cJpvf $(BACKUP_DIR)/$(PROJECT_NAME)_$(TIMESTAMP)_wp_data.tar.xz -C $(CURDIR) wp_data docker-compose.yml makefile .env
 	docker exec $(PROJECT_NAME)_mysql_1 /bin/bash -c '/usr/bin/mysqldump -u root -p"$${MYSQL_ROOT_PASSWORD}" "$${MYSQL_DATABASE}"' > $(BACKUP_DIR)/$(PROJECT_NAME)_$(TIMESTAMP)_database.sql
 
 update:
