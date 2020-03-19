@@ -10,9 +10,9 @@ Le fichier ~.env~ défini à la fois les valeurs des variables d'environnement n
 Pour réaliser l'installation de wordpress, il suffit de créer un répertoire wp_data et de changer le propriétaire pour l'utilisateur et le groupe auquel appartient l'utilisateur web, soit www-data. Cet utilisateur doit exister sur l'hôte(sinon je pense que le numéro d'utilisateur correspondant est 33). On peut utiliser la commande:
 #+begin_src 
 mkdir wp_data
-chown -R www-data:www-data wp_data
+sudo chown -R www-data:www-data wp_data
 #+end_src
-La configuration se fait après avoir lancé les deux dockers. Il faut aller accéder au site via un navigateur et commencer à faire son site web. (Peut-être qu'il faut accéder à la page $DOMAINE/wp-admin ou wp-login pour que l'installateur se lance...). Il est possible qu'il faille attendre quelques instants avant que traefik génère les certificats avec let's encrypt.
+La configuration se fait après avoir lancé les deux dockers. Il faut aller accéder au site via un navigateur et commencer à faire son site web. (Il faut attendre quelques instants que la base de données soit prête puis accéder à la page $DOMAINE (ou $SOUSDOMAINE.$DOMAINE) pour que l'installateur se lance...). Il est possible qu'il faille attendre quelques instants avant que traefik génère les certificats avec let's encrypt.
 ** Configuration de mysql
 Pour l'installation de la base de données, il faut créer le répertoire pour celle-ci.
 #+begin_src 
@@ -27,6 +27,11 @@ Pour faire une sauvegarde de la base de données, il faut exécuter un dump dans
 docker exec <id> /bin/bash -c '/usr/bin/mysqldump -u root -p"${MYSQL_ROOT_PASSWORD}" ${MYSQL_DATABASE}"' > <nom_du_fichier>
 #+end_src
 Cette commande utilise les variables d'environnement qui sont présentes dans le conteneur, donc pas besoin de les rentrer manuellement.
+
+Pour réinitialiser la base de donnée à partir d'un backup, il faut plutôt utiliser cette commande:
+#+begin_src 
+docker exec -i <CONTAINER> /bin/bash -c '/usr/bin/mysql -u root -p"$MYSQL_ROOT_PASSWORD" "$MYSQL_DATABASE"' < <backup.sql>
+#+end_src
 ** makefile
 Un fichier makefile permet de réaliser les différentes commandes de bases rapidement. Le but est surtout dans le cas d'un makefile à un niveau de hiérarchie plus haut que ce projet qui peut exécuter une commande donnée dans chacun des sous-répertoires. Cela permet donc que chaque makefile corresponde aux spécificités du conteneur. 
 
@@ -67,6 +72,11 @@ Et pour le point d'entrée HTTPS, c'est let's encrypt qui va générer le certif
 - "traefik.http.routers.wp_${DOMAINE_NAME}_https.tls=true"
 - "traefik.http.routers.wp_${DOMAINE_NAME}_https.tls.certresolver=webresolver"
  #+end_src 
-
+** Flow git
+Afin de partager mes projets et pouvoir les réutiliser pour différents serveurs, je partage qu'une version générique. Afin de la maintenir à jour à partir de ma configuration spécifique que j'utilise sur mon serveur, je définis un /merge driver/ qui permet de toujours conserver la version de la branche d'un fichier. Je définis donc des configurations génériques sur une branche et mes configurations spécifiques sur les branches de développement et production. Le ficher [[.gitattributes]] permet de définir chacun des fichiers qui doivent utiliser ce /merge driver/ de manière à ce que chaque branche ait ses versions spécifiques des fichiers. La commande suivante crée le /merge driver/ au niveau du projet ou dans la configuration du système avec l'option --global.
+#+begin_src
+git config [--global] merge.ours.driver true
+#+end_src
+Pour plus de détails pour que cela fonctionne bien, voir [[https://github.com/ermil/gitflow#public-repo-without-personal-information][mon flow git]].
 
 
